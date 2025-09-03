@@ -5,6 +5,7 @@
 #include "driver/timer.h"
 
 #include "Adafruit_GFX.h"
+#include "Font5x7Fixed.h"
 
 #include <driver/spi_master.h>
 #include "esp_attr.h"
@@ -28,7 +29,8 @@
 
 #define FRAME_RATE 60
 //#define TICKS_PER_ROW ((1000000 / FRAME_RATE / TIMER_INTERVAL_US + ROWS / 2) / ROWS) 
-#define TICKS_PER_TRANSACTION (((COLUMNS * 1000000UL + SPI_SPEED - 1) / SPI_SPEED + TIMER_INTERVAL_US - 1) / TIMER_INTERVAL_US)
+//#define TICKS_PER_TRANSACTION (((COLUMNS * 1000000UL + SPI_SPEED - 1) / SPI_SPEED + TIMER_INTERVAL_US - 1) / TIMER_INTERVAL_US)
+#define TICKS_PER_TRANSACTION 3
 #define TICKS_PER_FRAME (1000000 / FRAME_RATE / TIMER_INTERVAL_US)
 
 // SPI
@@ -50,6 +52,7 @@ TaskHandle_t highPrioTaskHandle = nullptr;
 void scrollBitmap(GFXcanvas1 *canvas, bool left);
 void initSPI();
 void transmitSPI(void *data, size_t length);
+int getTextWidth(const GFXfont *f, const String &text);
 
 // periodic timer wakes our high prio task every 300us to allow for shorter non-blocking delays
 bool IRAM_ATTR onTimer(void *arg)
@@ -85,11 +88,13 @@ void highPrioTask(void *pvParameters)
     {
         if (updateText)
         {
-            // TODO: measure text
-            int w = 6 * text.length();  // assume 6 pixels wide for each character (6x8 font)
+            auto fontPtr = &Font5x7Fixed;
+            int w = getTextWidth(fontPtr, text);
             canvas = std::unique_ptr<GFXcanvas1>(new GFXcanvas1(max(COLUMNS, w), ROWS));
 
+            canvas->setFont(fontPtr);
             canvas->setTextColor(1);
+            canvas->setCursor(0,7); // font is offset (default font is not)
             canvas->print(text.c_str());
 
             updateText = false;
@@ -124,7 +129,7 @@ void highPrioTask(void *pvParameters)
         // scroll needed?
         if ((tickCount - lastScroll) * TIMER_INTERVAL_US > scrollDelay * 1000)
         {
-            lastScroll += scrollDelay * 1000 / TIMER_INTERVAL_US;  // jitter-free scrolling timebase
+            lastScroll += scrollDelay * 1000 / TIMER_INTERVAL_US;  // constant scrolling timebase
             scrollBitmap(canvas.get(), true);
         }
     }
@@ -216,6 +221,27 @@ void initSPI() {
     spi_bus_add_device(SPI_HOST, &devcfg, &spi);
 }
 
+// text helper:
+int getTextWidth(const GFXfont *gfxFont, const String &text)
+{
+    uint8_t first = gfxFont->first;
+    uint8_t last = gfxFont->last;
+
+    int width = 0;
+    int len = text.length();
+    for (int i = 0; i < len; i++)
+    {
+        char c = text[i];
+        if (c >= first && c <= last)
+        {
+            GFXglyph *glyph = &gfxFont->glyph[c - first];
+            width += glyph->xAdvance;
+        }
+    }
+
+    return width;
+}
+
 // interface here:
 
 void ScrollingDisplayIntf::begin()
@@ -247,7 +273,7 @@ void ScrollingDisplayIntf::begin()
             "HighPrioTask",
             32 * 1024, // 32 KB stack
             nullptr,
-            23, // priority
+            25, // priority
             &highPrioTaskHandle
         );
 

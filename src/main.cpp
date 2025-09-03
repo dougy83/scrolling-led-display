@@ -44,15 +44,25 @@ technical:
 #include "ScrollingDisplay.h"
 
 #define LED_PIN 8
+#define MAX_TEXT_LENGTH 4096
 
 // wifi
 String ssid;
 String pass;
 #define AP_SSID "ScrollingDisplay"
 #define AP_PASS "HelloYellow"
+#define MDNS_HOSTNAME "scrollingdisplay"
 #define WIFI_RECONNECT_INTERVAL 60000 // 1 min
 WebServer server(80);
 IPAddress apIP(192, 168, 1, 1);
+
+// Files we use
+#define INDEX_HTML_FILENAME "/web/index.html"
+#define WIFI_CREDS_FILENAME "/wifi.txt"
+#define MESSAGE_FILENAME    "/message.txt"
+
+// TODO: save ssid, pass, text, delay to file after updating them
+// TODO: have AP enabled for a minute on boot always (not just if there's no connection)
 
 String systemInfo()
 {
@@ -67,45 +77,82 @@ String systemInfo()
     size_t usedHeap = totalHeap - freeHeap;
 
     // Build single-line string
-    String info = "FS: total=" + String(totalBytes * 0.001) + "kB, used=" + String(usedBytes * 0.001) +
-                  "kB, free=" + String(freeBytes * 0.001) + "kB; RAM: total=" + String(totalHeap * 0.001) +
-                  "kB, used=" + String(usedHeap * 0.001) + "kB, free=" + String(freeHeap * 0.001) + "kB..   ";
+    String info = "FS: total=" + String(totalBytes * 0.001, 1) + "kB, used=" + String(usedBytes * 0.001, 1) +
+                  "kB, free=" + String(freeBytes * 0.001, 1) + "kB; RAM: total=" + String(totalHeap * 0.001, 1) +
+                  "kB, used=" + String(usedHeap * 0.001, 1) + "kB, free=" + String(freeHeap * 0.001, 1) + "kB..   ";
     return info;
 }
+
 void initServer()
 {
     // Serve index.html from LittleFS
     server.on("/", HTTP_GET, []()
-    {
-        if (LittleFS.exists("/index.html")) {
-            File f = LittleFS.open("/index.html", "r");
+              {
+        File f;
+        if (f = LittleFS.open(INDEX_HTML_FILENAME, "r")){
             server.streamFile(f, "text/html");
             f.close();
         } else {
             server.send(404, "text/plain", "index.html not found");
-        }
-    });
+        } });
 
     // /settext?text=<sometext>&delay=<somenumber>
     server.on("/settext", HTTP_GET, []()
-    {
+              {
+        String newText;
+        int newDelay = 50;
+        bool save = false;
+
         if (server.hasArg("text")) {
-            ScrollingDisplay.setText(server.arg("text"));
+            newText = server.arg("text");
+            if (newText.length() > MAX_TEXT_LENGTH) {
+                newText = newText.substring(0, MAX_TEXT_LENGTH);
+            }
+            ScrollingDisplay.setText(newText);
+            save = true;
         }
         if (server.hasArg("delay")) {
-            ScrollingDisplay.setScrollDelay(server.arg("delay").toInt());
+            newDelay = server.arg("delay").toInt();
+            ScrollingDisplay.setScrollDelay(newDelay);
+            save = true;
         }
-        server.send(200, "text/plain", "");
-    });
+
+        if (save) {
+            File f;
+            if (f = LittleFS.open(MESSAGE_FILENAME, "w")) {
+                f.println(newText);
+                f.println(newDelay);
+                f.close();
+            }
+        }
+        server.send(200, "text/plain", ""); });
 
     // /setwifi?ssid=<ssid>&pass=<pass>
     server.on("/setwifi", HTTP_GET, []()
-    {
+              {
+        bool save = false;
         if (server.hasArg("ssid")) {
-            ssid = server.arg("ssid");
+            String temp = server.arg("ssid");
+            if (temp.length() < 32) {
+                ssid = temp;
+                save = true;
+            }
         }
         if (server.hasArg("pass")) {
-            pass = server.arg("pass");
+            String temp = server.arg("pass");
+            if (temp.length() < 32) {
+                pass = temp;
+                save = true;
+            }
+        }
+
+        if (save) {
+            File f;
+            if (f = LittleFS.open(WIFI_CREDS_FILENAME, "w")) {
+                f.println(ssid);
+                f.println(pass);
+                f.close();
+            }
         }
 
         String response = "Wi-Fi set to: " + ssid;
@@ -113,19 +160,24 @@ void initServer()
         server.send(200, "text/plain", response);
 
         // Attempt connection asynchronously
-        WiFi.begin(ssid.c_str(), pass.c_str());
-    });
+        WiFi.begin(ssid.c_str(), pass.c_str()); });
 
-        // OTA firmware upload
-    server.on("/setota", HTTP_POST, []() {
-        // Called when upload is finished
-        if (Update.hasError()) {
-            server.send(500, "text/plain", "OTA Update Failed");
-        } else {
-            server.send(200, "text/plain", "OTA Update Successful! Rebooting...");
-        }
-        ESP.restart();  // reboot after successful update
-    }, []() {
+    // OTA firmware upload
+    server.on("/setota", HTTP_POST, []()
+              {
+                  // Called when upload is finished
+                  if (Update.hasError())
+                  {
+                      server.send(500, "text/plain", "OTA Update Failed");
+                  }
+                  else
+                  {
+                      server.send(200, "text/plain", "OTA Update Successful! Rebooting...");
+                  }
+                  ESP.restart(); // reboot after successful update
+              },
+              []()
+              {
         // Called during file upload
         HTTPUpload& upload = server.upload();
         if (upload.status == UPLOAD_FILE_START) {
@@ -144,8 +196,7 @@ void initServer()
             } else {
                 Update.printError(Serial);
             }
-        }
-    });
+        } });
 
     server.begin();
     Serial.println("HTTP server started");
@@ -155,18 +206,19 @@ void setup()
 {
     Serial.begin(115200);
     ScrollingDisplay.begin();
+    delay(100);
 
     // init FS, and load saved settings
     if (LittleFS.begin(true))
     {
-        File f = LittleFS.open("/message.txt", "r");
+        File f = LittleFS.open(MESSAGE_FILENAME, "r");
         if (f)
         {
-            int scrollDelay = atoi(f.readStringUntil('\n').c_str());
-            ScrollingDisplay.setScrollDelay(scrollDelay > 0 ? scrollDelay : 50);
-
             String msg = f.readStringUntil('\n');
             ScrollingDisplay.setText(msg);
+
+            int scrollDelay = atoi(f.readStringUntil('\n').c_str());
+            ScrollingDisplay.setScrollDelay(scrollDelay > 0 ? scrollDelay : 50);
 
             f.close();
         }
@@ -175,7 +227,7 @@ void setup()
             ScrollingDisplay.setText(systemInfo());
         }
 
-        f = LittleFS.open("/wifi.txt", "r");
+        f = LittleFS.open(WIFI_CREDS_FILENAME, "r");
         if (f)
         {
             ssid = f.readStringUntil('\n');
@@ -194,6 +246,10 @@ void handleWiFiConnection()
 {
     if (WiFi.isConnected())
     {
+        if (millis() > 120000 && WiFi.getMode() == WIFI_AP_STA)
+        {
+            WiFi.mode(WIFI_STA);    // don't need AP anymore
+        }
         return;
     }
 
@@ -221,7 +277,7 @@ void handleWiFiConnection()
         if (WiFi.isConnected())
         {
             Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
-            if (MDNS.begin("scrollingdisplay"))
+            if (MDNS.begin(MDNS_HOSTNAME))
             {
                 MDNS.addService("http", "tcp", 80);
             }

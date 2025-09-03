@@ -5,90 +5,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Device Control</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f0f0f0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-    }
+/* Body and container */
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f0f0;
+    margin: 0;
+    padding: 20px 0;
+    min-height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+}
 
-    .shadow-box {
-        background: #ffffff;
-        padding: 20px 30px;
-        border-radius: 15px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-        text-align: center;
-        width: 320px;
-        margin: 10px 0;
-    }
+.container {
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 0 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
 
+/* Shadow boxes */
+.shadow-box {
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    text-align: center;
+    width: 100%;
+    margin-bottom: 15px;
+    transition: transform 0.2s;
+}
+
+.shadow-box:hover {
+    transform: translateY(-2px);
+}
+
+.shadow-box h2 {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+}
+
+/* Inputs */
+.shadow-box input {
+    width: 100%;
+    padding: 6px 8px;
+    margin: 6px 0;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+.shadow-box button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background-color: #007BFF;
+    color: white;
+    cursor: pointer;
+    font-size: 0.95rem;
+    margin-top: 6px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.shadow-box button:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+}
+
+.shadow-box button:active {
+    transform: translateY(0);
+}
+
+/* Responsive adjustments */
+@media (min-width: 480px) {
     .shadow-box input {
-        width: 100%;
-        padding: 8px;
-        margin: 10px 0;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-        box-sizing: border-box;
+        font-size: 1rem;
     }
-
     .shadow-box button {
-        padding: 10px 20px;
-        border-radius: 8px;
-        border: none;
-        background-color: #007BFF;
-        color: white;
-        cursor: pointer;
-        font-size: 16px;
-        margin-top: 10px;
+        font-size: 1rem;
     }
+}
 
-    .shadow-box button:hover {
-        background-color: #0056b3;
-    }
-
-    h2 { margin-bottom: 10px; }
 </style>
 </head>
 <body>
 
-<div class="shadow-box">
-    <h2>Scroll Display</h2>
-    <input type="text" id="scrollText" placeholder="Enter scroll text">
-    <input type="number" id="scrollDelay" placeholder="Scroll delay (ms)" min="0">
-    <button onclick="sendScrollText()">Update Display</button>
-</div>
+<div class="container">
+    <div class="shadow-box">
+        <h2>Scroll Display</h2>
+        <input type="text" id="scrollText" placeholder="Enter scroll text">
+        <input type="number" id="scrollDelay" placeholder="Scroll delay (ms)" min="0">
+        <button onclick="sendScrollText()">Update Display</button>
+    </div>
 
-<div class="shadow-box">
-    <h2>Wi-Fi Setup</h2>
-    <input type="text" id="wifiSSID" placeholder="SSID">
-    <input type="password" id="wifiPass" placeholder="Password">
-    <button onclick="sendWiFi()">Set Wi-Fi</button>
-</div>
+    <div class="shadow-box">
+        <h2>Wi-Fi Setup</h2>
+        <input type="text" id="wifiSSID" placeholder="SSID">
+        <input type="password" id="wifiPass" placeholder="Password">
+        <button onclick="sendWiFi()">Set Wi-Fi</button>
+    </div>
 
-<div class="shadow-box">
-    <h2>OTA Firmware</h2>
-    <input type="file" id="firmwareFile">
-    <button onclick="sendOTA()">Upload Firmware</button>
+    <div class="shadow-box">
+        <h2>OTA Firmware</h2>
+        <input type="file" id="firmwareFile">
+        <button onclick="sendOTA()">Upload Firmware</button>
+    </div>
 </div>
 
 <script>
+function handleResponse(response, successMessage) {
+    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+    return response.text().then(() => alert(successMessage));
+}
+
 function sendScrollText() {
     const text = encodeURIComponent(document.getElementById('scrollText').value);
-    const delay = encodeURIComponent(document.getElementById('scrollDelay').value || 1000);
+    const delay = encodeURIComponent(document.getElementById('scrollDelay').value || 50);
     fetch(`/settext?text=${text}&delay=${delay}`)
-        .then(() => alert('Scroll text updated!'))
-        .catch(() => alert('Failed to update scroll text.'));
+        .then(response => handleResponse(response, 'Scroll text updated!'))
+        .catch(err => alert('Failed to update scroll text: ' + err.message));
 }
 
 function sendWiFi() {
     const ssid = encodeURIComponent(document.getElementById('wifiSSID').value);
     const pass = encodeURIComponent(document.getElementById('wifiPass').value);
     fetch(`/setwifi?ssid=${ssid}&pass=${pass}`)
-        .then(() => alert('Wi-Fi credentials sent!'))
-        .catch(() => alert('Failed to set Wi-Fi.'));
+        .then(response => handleResponse(response, 'Wi-Fi credentials sent!'))
+        .catch(err => alert('Failed to set Wi-Fi: ' + err.message));
 }
 
 function sendOTA() {
@@ -97,23 +146,13 @@ function sendOTA() {
         alert('Please select a firmware file.');
         return;
     }
-
     const file = fileInput.files[0];
     const formData = new FormData();
     formData.append('firmware', file);
 
-    fetch('/setota', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.text())
-    .then(data => {
-        alert('Firmware uploaded! Device may reboot.');
-    })
-    .catch(err => {
-        console.error(err);
-        alert('OTA upload failed.');
-    });
+    fetch('/setota', { method: 'POST', body: formData })
+        .then(response => handleResponse(response, 'Firmware uploaded! Device may reboot.'))
+        .catch(err => alert('OTA upload failed: ' + err.message));
 }
 </script>
 
