@@ -92,6 +92,21 @@ body {
     }
 }
 
+/* Modal overlay */
+#status-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.95);
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    font-size: 1rem;
+    text-align: center;
+    z-index: 9999;
+    display: none; /* hidden by default */
+}
 </style>
 </head>
 <body>
@@ -114,14 +129,30 @@ body {
     <div class="shadow-box">
         <h2>OTA Firmware</h2>
         <input type="file" id="firmwareFile">
-        <button onclick="sendOTA()">Upload Firmware</button>
+        <button onclick="sendOTA()" id="upload-button">Upload Firmware</button>
     </div>
 </div>
 
+<!-- Status modal -->
+<div id="status-modal"></div>
+
 <script>
+/* Modal helper */
+function showStatus(message, duration = 3000) {
+    const modal = document.getElementById('status-modal');
+    modal.textContent = message;
+    modal.style.display = 'block';
+    if (duration > 0) {
+        setTimeout(() => { modal.style.display = 'none'; }, duration);
+    }
+}
+
 function handleResponse(response, successMessage) {
-    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-    return response.text().then(() => alert(successMessage));
+    if (!response.ok) {
+        response.text().then(text => showStatus('Error: ' + text, 3000));
+        throw new Error(`HTTP error ${response.status}`);
+    }
+    return response.text().then(() => showStatus(successMessage, 3000));
 }
 
 function sendScrollText() {
@@ -129,7 +160,7 @@ function sendScrollText() {
     const delay = encodeURIComponent(document.getElementById('scrollDelay').value || 50);
     fetch(`/settext?text=${text}&delay=${delay}`)
         .then(response => handleResponse(response, 'Scroll text updated!'))
-        .catch(err => alert('Failed to update scroll text: ' + err.message));
+        .catch(err => console.error(err));
 }
 
 function sendWiFi() {
@@ -137,22 +168,27 @@ function sendWiFi() {
     const pass = encodeURIComponent(document.getElementById('wifiPass').value);
     fetch(`/setwifi?ssid=${ssid}&pass=${pass}`)
         .then(response => handleResponse(response, 'Wi-Fi credentials sent!'))
-        .catch(err => alert('Failed to set Wi-Fi: ' + err.message));
+        .catch(err => console.error(err));
 }
 
 function sendOTA() {
     const fileInput = document.getElementById('firmwareFile');
     if (!fileInput.files.length) {
-        alert('Please select a firmware file.');
+        showStatus('Please select a firmware file.', 3000);
         return;
     }
     const file = fileInput.files[0];
     const formData = new FormData();
     formData.append('firmware', file);
 
+    const button = document.getElementById('upload-button');
+    button.disabled = true;
+    showStatus('Uploading...', 0); // stays until manually hidden
+
     fetch('/setota', { method: 'POST', body: formData })
         .then(response => handleResponse(response, 'Firmware uploaded! Device may reboot.'))
-        .catch(err => alert('OTA upload failed: ' + err.message));
+        .catch(err => showStatus('OTA upload failed: ' + err.message, 3000))
+        .finally(() => { button.disabled = false; });
 }
 </script>
 

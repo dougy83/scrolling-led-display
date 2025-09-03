@@ -61,9 +61,6 @@ IPAddress apIP(192, 168, 1, 1);
 #define WIFI_CREDS_FILENAME "/wifi.txt"
 #define MESSAGE_FILENAME    "/message.txt"
 
-// TODO: save ssid, pass, text, delay to file after updating them
-// TODO: have AP enabled for a minute on boot always (not just if there's no connection)
-
 String systemInfo()
 {
     // LittleFS info
@@ -181,6 +178,8 @@ void initServer()
         // Called during file upload
         HTTPUpload& upload = server.upload();
         if (upload.status == UPLOAD_FILE_START) {
+            ScrollingDisplay.setText("");   // it goes funky during update
+
             Serial.printf("OTA Start: %s\n", upload.filename.c_str());
             if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { // Start with unknown size
                 Update.printError(Serial);
@@ -231,7 +230,9 @@ void setup()
         if (f)
         {
             ssid = f.readStringUntil('\n');
+            ssid.trim();
             pass = f.readStringUntil('\n');
+            pass.trim();
 
             f.close();
         }
