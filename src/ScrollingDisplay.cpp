@@ -6,6 +6,9 @@
 
 #include "Adafruit_GFX.h"
 
+#include <driver/spi_master.h>
+#include "esp_attr.h"
+
 #include <atomic>
 #include <memory>
 
@@ -19,9 +22,32 @@
 #define TIMER_GROUP TIMER_GROUP_0
 #define TIMER_IDX TIMER_0
 #define TIMER_DIVIDER 80 // 80 MHz / 80 = 1 MHz (1 tick = 1 µs)
-#define TIMER_INTERVAL_US 300
+#define TIMER_INTERVAL_US 300   // this is what I'm referring to as "ticks"
 
+#define FRAME_RATE 60
+//#define TICKS_PER_ROW ((1000000 / FRAME_RATE / TIMER_INTERVAL_US + ROWS / 2) / ROWS) 
+#define TICKS_PER_TRANSACTION (((COLUMNS * 1000000UL + SPI_SPEED - 1) / SPI_SPEED + TIMER_INTERVAL_US - 1) / TIMER_INTERVAL_US)
+#define TICKS_PER_FRAME (1000000 / FRAME_RATE / TIMER_INTERVAL_US)
+
+// SPI
+#define SPI_HOST SPI2_HOST  // use HSPI
+#define SPI_SPEED 2000000
+void *dmaBuff = nullptr;
+spi_transaction_t spiTrans = {};
+
+// stuff for our task
+String text("Hello");
+std::atomic<bool> updateText(true);
+std::atomic<int> scrollDelay(50);
+std::atomic<uint32_t> tickCount(0);
+
+spi_device_handle_t spi = nullptr;
 TaskHandle_t highPrioTaskHandle = nullptr;
+
+// forward refs
+void scrollBitmap(GFXcanvas1 *canvas, bool left);
+void initSPI();
+void transmitSPI(void *data, size_t length);
 
 // periodic timer wakes our high prio task every 300us to allow for shorter non-blocking delays
 bool IRAM_ATTR onTimer(void *arg)
@@ -32,13 +58,11 @@ bool IRAM_ATTR onTimer(void *arg)
         vTaskNotifyGiveFromISR(highPrioTaskHandle, &needToYield);
     }
 
+    tickCount++;
+
     return needToYield;
 }
 
-// stuff for our task
-String text("Hello");
-std::atomic<bool> updateText(true);
-std::atomic<int> scrollDelay(10);
 
 // waits for a timer trigger tick
 void inline tick(int count = 1)
@@ -52,37 +76,59 @@ void inline tick(int count = 1)
 // High priority task
 void highPrioTask(void *pvParameters)
 {
-    std::unique_ptr<GFXcanvas1> canvas;
+    std::unique_ptr<GFXcanvas1> canvas(new GFXcanvas1(COLUMNS, ROWS));
+    uint32_t lastScroll = tickCount;
     
     for (;;)
     {
         if (updateText)
         {
             // TODO: measure text
-            int w = 6 * text.length();  // assume 6 pixels wide for each character (6x7 font)
+            int w = 6 * text.length();  // assume 6 pixels wide for each character (6x8 font)
             canvas = std::unique_ptr<GFXcanvas1>(new GFXcanvas1(max(COLUMNS, w), ROWS));
 
+            canvas->setTextColor(1);
+            canvas->print(text.c_str());
+
+            updateText = false;
         }
-        // Block until timer ISR notifies
-        tick();
 
-        digitalWrite(8, HIGH);
-        tick(500);
-        digitalWrite(8, LOW);
-        tick(500);
+        for (int r = 0; r < ROWS; r++)
+        {
+            using PinDefs = ScrollingDisplayIntf::PinDefs;
 
+            // select row
+            digitalWrite(PinDefs::r0, !!(r & 1));
+            digitalWrite(PinDefs::r1, !!(r & 2));
+            digitalWrite(PinDefs::r2, !!(r & 4));
 
-        // ---- Do your high-frequency work here ----
-        // e.g., queue an SPI transaction
-        // spi_device_queue_trans(...);
+            // send the data
+            int16_t w, h;
+            canvas->getSize(w, h);
+            int span = (w + 7) / 8;
+            auto ptr = &canvas->getBuffer()[r * span];
+            transmitSPI(ptr, span);
 
-        // Debug (avoid in real 300µs loop):
-        // gpio_set_level(GPIO_NUM_2, 1);
-        // gpio_set_level(GPIO_NUM_2, 0);
+            tick(TICKS_PER_TRANSACTION);    // SPI will transfer in this time
+
+            digitalWrite(PinDefs::oe, LOW);     // LEDs on
+            tick();
+            digitalWrite(PinDefs::oe, HIGH);     // LEDs off
+        }
+
+        // delay for the rest of the frame
+        tick(TICKS_PER_FRAME - ROWS * (TICKS_PER_TRANSACTION + 1));
+
+        // scroll needed?
+        if ((tickCount - lastScroll) * TIMER_INTERVAL_US > scrollDelay * 1000)
+        {
+            lastScroll += scrollDelay * 1000 / TIMER_INTERVAL_US;  // jitter-free scrolling timebase
+            scrollBitmap(canvas.get(), true);
+        }
     }
 }
 
-// scroll the bitmap one pixel, left or right, wrapping around. For normal scroll, it makes sense to make the bitmap content width + display width
+// scroll the bitmap one pixel, left or right, wrapping around
 void scrollBitmap(GFXcanvas1 *canvas, bool left)
 {
     int16_t width, height;
@@ -117,6 +163,57 @@ void scrollBitmap(GFXcanvas1 *canvas, bool left)
     }
 }
 
+
+void transmitSPI(void *data, size_t length) {
+    constexpr size_t buffSize = (COLUMNS + 7) / 8;
+    if (length > buffSize)
+    {
+        length = buffSize;
+    }
+
+    if (!dmaBuff)
+    {
+        dmaBuff = heap_caps_malloc(buffSize, MALLOC_CAP_DMA);
+    }
+
+    if (dmaBuff)
+    {
+        spi_transaction_t *result;
+        spi_device_get_trans_result(spi, &result, 0);   // purge
+
+        memset(&spiTrans, 0, sizeof(spiTrans));
+        spiTrans.length = length * 8;     // bits
+        spiTrans.tx_buffer = dmaBuff;
+        memcpy(dmaBuff, data, length);
+
+        esp_err_t ret = spi_device_queue_trans(spi, &spiTrans, 0);
+        if (ret != ESP_OK) {
+            // queue full, handle if needed
+        }
+    }
+}
+
+void initSPI() {
+    using PinDefs = ScrollingDisplayIntf::PinDefs;
+
+    spi_bus_config_t buscfg = {};
+    buscfg.mosi_io_num = PinDefs::data;
+    buscfg.miso_io_num = -1;
+    buscfg.sclk_io_num = PinDefs::clk;
+    buscfg.quadhd_io_num = -1;
+    buscfg.quadwp_io_num = -1;
+    buscfg.max_transfer_sz = 4096;
+
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = SPI_SPEED;
+    devcfg.mode = 0;
+    devcfg.spics_io_num = PinDefs::cs;
+    devcfg.queue_size = 1;  // only single transaction ever
+
+    spi_bus_initialize(SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    spi_bus_add_device(SPI_HOST, &devcfg, &spi);
+}
+
 // interface here:
 
 void ScrollingDisplayIntf::begin()
@@ -138,7 +235,10 @@ void ScrollingDisplayIntf::begin()
         digitalWrite(PinDefs::r1, HIGH);    // high for now
         pinMode(PinDefs::r2, OUTPUT);
         digitalWrite(PinDefs::r2, LOW);
-        
+
+        // init the SPI for non-blocking DMA transfers
+        initSPI();
+
         // Create high priority task (stack 32kB, prio 23)
         xTaskCreate(
             highPrioTask,
@@ -168,10 +268,13 @@ void ScrollingDisplayIntf::begin()
     }
 }
 
-void ScrollingDisplayIntf::setText(String &s)
+void ScrollingDisplayIntf::setText(const String &s)
 {
-    text = s;
-    updateText = true;
+    if (!updateText)
+    {
+        text = s;
+        updateText = true;
+    }
 }
 
 void ScrollingDisplayIntf::setScrollRate(int pixelShiftDelayMillis)

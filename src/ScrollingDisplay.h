@@ -7,7 +7,7 @@ class ScrollingDisplayIntf
 {
 public:
     void begin();
-    void setText(String &s);
+    void setText(const String &s);
     void setScrollRate(int pixelShiftDelayMillis);
 
     // IO definitions

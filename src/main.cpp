@@ -41,30 +41,16 @@ technical:
 void setup()
 {
     ScrollingDisplay.begin();
+    ScrollingDisplay.setScrollRate(50);
+    ScrollingDisplay.setText("Wrote 273984 bytes (153433 compressed) at 0x00010000 in 2.0 seconds (effective 1084.5 kbit/s)...");
 
     pinMode(8, OUTPUT);
 }
 
 void loop()
 {
-    // const char *msg = "Hello SPI!";
-
-    // digitalWrite(PinDefs::cs, LOW); // Select slave
-    // SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-
-    // for (int i = 0; msg[i] != '\0'; i++)
-    // {
-    //     SPI.transfer(msg[i]);
-    // }
-
-    // SPI.endTransaction();
-    // digitalWrite(PinDefs::cs, HIGH); // Deselect slave
-
-    // delay(1);
-
-    // digitalWrite(PinDefs::oe, LOW);
-    // delayMicroseconds(300);
-    // digitalWrite(PinDefs::oe, HIGH);
-    
-    delay(200); 
+    digitalWrite(8, LOW);
+    delay(300);
+    digitalWrite(8, HIGH);    
+    delay(300); 
 }
