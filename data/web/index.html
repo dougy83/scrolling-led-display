@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Device Control</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f0f0f0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+    }
+
+    .shadow-box {
+        background: #ffffff;
+        padding: 20px 30px;
+        border-radius: 15px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        text-align: center;
+        width: 320px;
+        margin: 10px 0;
+    }
+
+    .shadow-box input {
+        width: 100%;
+        padding: 8px;
+        margin: 10px 0;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
+    }
+
+    .shadow-box button {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        background-color: #007BFF;
+        color: white;
+        cursor: pointer;
+        font-size: 16px;
+        margin-top: 10px;
+    }
+
+    .shadow-box button:hover {
+        background-color: #0056b3;
+    }
+
+    h2 { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<div class="shadow-box">
+    <h2>Scroll Display</h2>
+    <input type="text" id="scrollText" placeholder="Enter scroll text">
+    <input type="number" id="scrollDelay" placeholder="Scroll delay (ms)" min="0">
+    <button onclick="sendScrollText()">Update Display</button>
+</div>
+
+<div class="shadow-box">
+    <h2>Wi-Fi Setup</h2>
+    <input type="text" id="wifiSSID" placeholder="SSID">
+    <input type="password" id="wifiPass" placeholder="Password">
+    <button onclick="sendWiFi()">Set Wi-Fi</button>
+</div>
+
+<div class="shadow-box">
+    <h2>OTA Firmware</h2>
+    <input type="file" id="firmwareFile">
+    <button onclick="sendOTA()">Upload Firmware</button>
+</div>
+
+<script>
+function sendScrollText() {
+    const text = encodeURIComponent(document.getElementById('scrollText').value);
+    const delay = encodeURIComponent(document.getElementById('scrollDelay').value || 1000);
+    fetch(`/settext?text=${text}&delay=${delay}`)
+        .then(() => alert('Scroll text updated!'))
+        .catch(() => alert('Failed to update scroll text.'));
+}
+
+function sendWiFi() {
+    const ssid = encodeURIComponent(document.getElementById('wifiSSID').value);
+    const pass = encodeURIComponent(document.getElementById('wifiPass').value);
+    fetch(`/setwifi?ssid=${ssid}&pass=${pass}`)
+        .then(() => alert('Wi-Fi credentials sent!'))
+        .catch(() => alert('Failed to set Wi-Fi.'));
+}
+
+function sendOTA() {
+    const fileInput = document.getElementById('firmwareFile');
+    if (!fileInput.files.length) {
+        alert('Please select a firmware file.');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('firmware', file);
+
+    fetch('/setota', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(data => {
+        alert('Firmware uploaded! Device may reboot.');
+    })
+    .catch(err => {
+        console.error(err);
+        alert('OTA upload failed.');
+    });
+}
+</script>
+
+</body>
+</html>

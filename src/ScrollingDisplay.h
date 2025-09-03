@@ -8,7 +8,7 @@ class ScrollingDisplayIntf
 public:
     void begin();
     void setText(const String &s);
-    void setScrollRate(int pixelShiftDelayMillis);
+    void setScrollDelay(int pixelShiftDelayMillis);
 
     // IO definitions
     struct PinDefs
