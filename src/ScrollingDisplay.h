@@ -22,6 +22,8 @@ public:
             data = 6, // SPI MOSI
             oe = 0;   // enable display output
     };
+
+    static constexpr uint32_t MaxTextLength = 4096;
 };
 
 extern ScrollingDisplayIntf ScrollingDisplay;

@@ -19,8 +19,6 @@
 #define MODULES 7         // was 8 display modules, but ones been removed
 #define COLUMNS (MODULE_COLUMNS * MODULES)
 
-#define MAX_TEXT_LENGTH 4096
-
 // timer resource alloc stuff
 #define TIMER_GROUP TIMER_GROUP_0
 #define TIMER_IDX TIMER_0
@@ -300,13 +298,13 @@ void ScrollingDisplayIntf::setText(const String &s)
 {
     if (!updateText)
     {
-        if (s.length() <= MAX_TEXT_LENGTH)
+        if (s.length() <= MaxTextLength)
         {
             text = s;
         }
         else
         {
-            text = s.substring(0, MAX_TEXT_LENGTH);
+            text = s.substring(0, MaxTextLength);
         }
 
         updateText = true;

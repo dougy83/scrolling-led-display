@@ -47,7 +47,6 @@ technical:
 #include "ScrollingDisplay.h"
 
 #define LED_PIN 8
-#define MAX_TEXT_LENGTH 4096
 
 #ifdef DEBUG
 #define DEBUG_PRINTF(...) Serial.printf(__VA_ARGS__)
@@ -121,8 +120,8 @@ void initServer()
 
         if (server.hasArg("text")) {
             text = server.arg("text");
-            if (text.length() > MAX_TEXT_LENGTH) {
-                text = text.substring(0, MAX_TEXT_LENGTH);
+            if (text.length() > ScrollingDisplay.MaxTextLength) {
+                text = text.substring(0, ScrollingDisplay.MaxTextLength);
             }
             ScrollingDisplay.setText(text);
             save = true;
