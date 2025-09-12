@@ -13,7 +13,7 @@ Connector pinout:
 9 - data    - data to go in the shift register
 10 - GND    - common ground / 0V
 
-To display something, the row data is shifted in, latch, output enabled, repeat.
+To display something, the row data is shifted in, latched, output enabled, repeat.
 The R0..2 bits and the /OE pin enable drive for LEDs of that row. When measured from working device, OE was asserted for 300us on per row per frame (60fps).
 Sample board used 20MHz clock, which is marginal (low pin drive current results in sawtooth waveform). We will use 2MHz instead.
 
@@ -30,7 +30,7 @@ technical:
             - use adafruit graphics library for drawing to the bitmap
         - control signals and queuing SPI transfers
 - low prio task does the logic for the network, and forwards changes of the string to the high prio task
-    - web interface have index.html for setting the string via UI, and single API endpoint for setting the text and scroll rate
+    - web interface have index.html for setting the displayed text and scroll rate, as well as connection SSIDs and passwords, and OTA firmware/filesystem updates
 */
 
 // #define DEBUG // << enable serial print statements
@@ -50,8 +50,8 @@ technical:
 #define MAX_TEXT_LENGTH 4096
 
 #ifdef DEBUG
-#define DEBUG_PRINTF(...) DEBUG_PRINTF(__VA_ARGS__)
-#define DEBUG_PRINTLN(...) DEBUG_PRINTLN(__VA_ARGS__)
+#define DEBUG_PRINTF(...) Serial.printf(__VA_ARGS__)
+#define DEBUG_PRINTLN(...) Serial.println(__VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #define DEBUG_PRINTLN(...)
