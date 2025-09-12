@@ -36,17 +36,17 @@
 // SPI
 #define SPI_HOST SPI2_HOST  // use HSPI
 #define SPI_SPEED 2000000
-void *dmaBuff = nullptr;
-spi_transaction_t spiTrans = {};
+static void *dmaBuff = nullptr;
+static spi_transaction_t spiTrans = {};
 
 // stuff for our task
-String text("Hello");
-std::atomic<bool> updateText(true);
-std::atomic<int> scrollDelay(50);
-std::atomic<uint32_t> tickCount(0);
+static String text("Hello");
+static std::atomic<bool> updateText(true);
+static std::atomic<int> scrollDelay(50);
+static std::atomic<uint32_t> tickCount(0);
 
-spi_device_handle_t spi = nullptr;
-TaskHandle_t highPrioTaskHandle = nullptr;
+static spi_device_handle_t spi = nullptr;
+static TaskHandle_t highPrioTaskHandle = nullptr;
 
 // forward refs
 void scrollBitmap(GFXcanvas1 *canvas, bool left);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Device Control</title>
+<title>Scrolling Display Device Control</title>
 <style>
 /* Body and container */
 body {
@@ -115,22 +115,33 @@ body {
     <div class="shadow-box">
         <h2>Scroll Display</h2>
         <input type="text" id="scrollText" placeholder="Enter scroll text">
-        <input type="number" id="scrollDelay" placeholder="Scroll delay (ms)" min="0">
+        <input type="number" id="scrollDelay" placeholder="Scroll delay (ms)" min="0" title="Time (in milliseconds) for text to move one pixel">
         <button onclick="sendScrollText()">Update Display</button>
     </div>
 
     <div class="shadow-box">
         <h2>Wi-Fi Setup</h2>
+        <p>Fields left blank will not be updated</p>
         <input type="text" id="wifiSSID" placeholder="SSID">
         <input type="password" id="wifiPass" placeholder="Password">
+        <input type="text" id="hostname" placeholder="Hostname of this device">
+        <input type="text" id="apSSID" placeholder="AP SSID" title="SSID of the fallback access point (enabled on boot)">
+        <input type="password" id="apPass" placeholder="AP Password" title="Password for the fallback access point (enabled on boot)">
         <button onclick="sendWiFi()">Set Wi-Fi</button>
     </div>
 
     <div class="shadow-box">
-        <h2>OTA Firmware</h2>
-        <input type="file" id="firmwareFile">
-        <button onclick="sendOTA()" id="upload-button">Upload Firmware</button>
+        <h2>Firmware Update</h2>
+        <p>Select firmware and/or filesystem image file(s) to update</p>
+        <label for="firmwareFile">Firmware Binary (.bin):</label><br>
+        <input type="file" id="firmwareFile"><br><br>
+
+        <label for="fsFile">Filesystem Image (.bin):</label><br>
+        <input type="file" id="fsFile"><br><br>
+
+        <button onclick="sendOTA()" id="upload-button">Upload</button>
     </div>
+
 </div>
 
 <!-- Status modal -->
@@ -139,11 +150,15 @@ body {
 <script>
 /* Modal helper */
 function showStatus(message, duration = 3000) {
+    setControlsEnabled(false);
     const modal = document.getElementById('status-modal');
     modal.textContent = message;
     modal.style.display = 'block';
     if (duration > 0) {
-        setTimeout(() => { modal.style.display = 'none'; }, duration);
+        setTimeout(() => { 
+            modal.style.display = 'none'; 
+            setControlsEnabled(true);
+        }, duration);
     }
 }
 
@@ -166,30 +181,51 @@ function sendScrollText() {
 function sendWiFi() {
     const ssid = encodeURIComponent(document.getElementById('wifiSSID').value);
     const pass = encodeURIComponent(document.getElementById('wifiPass').value);
-    fetch(`/setwifi?ssid=${ssid}&pass=${pass}`)
-        .then(response => handleResponse(response, 'Wi-Fi credentials sent!'))
+    const apSsid = encodeURIComponent(document.getElementById('apSSID').value);
+    const apPass = encodeURIComponent(document.getElementById('apPass').value);
+    const hostname = encodeURIComponent(document.getElementById('hostname').value);
+
+    fetch(`/setwifi?ssid=${ssid}&pass=${pass}&apSsid=${apSsid}&apPass=${apPass}&hostname=${hostname}`)
+        .then(response => handleResponse(response, 'Wi-Fi settings sent!'))
         .catch(err => console.error(err));
 }
 
 function sendOTA() {
-    const fileInput = document.getElementById('firmwareFile');
-    if (!fileInput.files.length) {
-        showStatus('Please select a firmware file.', 3000);
+    const formData = new FormData();
+
+    const fwFile = document.getElementById('firmwareFile').files[0];
+    const fsFile = document.getElementById('fsFile').files[0];
+    
+    if (!fwFile && !fsFile) {
+        showStatus('Please select a firmware image and/or filesystem image file.', 3000);
         return;
     }
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('firmware', file);
 
-    const button = document.getElementById('upload-button');
-    button.disabled = true;
+    if (fwFile) {
+        formData.append('fw', fwFile);
+    }
+    if (fsFile) {
+        formData.append('fs', fsFile)
+    }
+
     showStatus('Uploading...', 0); // stays until manually hidden
 
     fetch('/setota', { method: 'POST', body: formData })
-        .then(response => handleResponse(response, 'Firmware uploaded! Device may reboot.'))
+        .then(response => handleResponse(response, 'File(s) uploaded! Device may reboot.'))
         .catch(err => showStatus('OTA upload failed: ' + err.message, 3000))
-        .finally(() => { button.disabled = false; });
+        .finally(() => setControlsEnabled(true));
 }
+
+function setControlsEnabled(state) {
+    document.querySelectorAll('input, button').forEach(el => {
+        if (state) {
+            el.removeAttribute('disabled');
+        } else {
+            el.setAttribute('disabled', 'true');
+        }
+    });
+}
+
 </script>
 
 </body>
