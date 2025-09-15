@@ -112,7 +112,8 @@ void highPrioTask(void *pvParameters)
             canvas->getSize(w, h);
             int span = (w + 7) / 8;
             auto ptr = &canvas->getBuffer()[r * span];
-            transmitSPI(ptr, span);
+            size_t count = min((COLUMNS + 7) / 8, span);   // only transfer the bit we can see
+            transmitSPI(ptr, count);
 
             tick(TICKS_PER_TRANSACTION);    // SPI will transfer in this time
 
