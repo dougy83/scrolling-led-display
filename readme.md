@@ -33,7 +33,7 @@ The ESP32 drives the rows sequentially at **~60 FPS** using a timer interrupt.
 - **Wi-Fi modes**:
   - Boots in **AP mode** (`ScrollingDisplay` / `12345678`) at `192.168.0.1`
   - Attempts to connect to saved STA Wi-Fi after boot
-  - Disconnects AP after 5 minutes, if no connection
+  - AP disabled 5 minutes after boot, if no connection
 - **Web UI** (served from `/data/index.html` in LittleFS):
   - Set display text and scroll delay  
   - Configure Wi-Fi (SSID, password, AP credentials, mDNS hostname)  
@@ -65,6 +65,7 @@ Upload firmware and filesystem via USB connection, using the standard PlatformIO
         * Go to either [scrollingdisplay.local]() (default), or whatever hostname you configured,
         * Or access via it's IP address, which you could find from your router
 2. Once the configuration page has loaded, you can upload the firmware and/or the filesystem images.
+3. If not building locally from source, you can find the prebuilt images as artifacts of the github actions (built every push), or download a release (if there is one).
 
 
 ## Refs
